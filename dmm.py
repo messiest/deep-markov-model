@@ -14,12 +14,14 @@ Reference:
 
 import argparse
 import time
+import os
 from os.path import exists
 
 import numpy as np
 import six.moves.cPickle as pickle
 import torch
 import torch.nn as nn
+from tqdm import trange
 
 import polyphonic_data_loader as poly
 import pyro
@@ -327,9 +329,9 @@ def main(args):
     # saves the model and optimizer states to disk
     def save_checkpoint():
         log("saving model to %s..." % args.save_model)
-        torch.save(dmm.state_dict(), args.save_model)
+        torch.save(dmm.state_dict(), os.path.join('.', 'checkpoints', 'dmm_model.pth'))
         log("saving optimizer states to %s..." % args.save_opt)
-        adam.save(args.save_opt)
+        adam.save(os.path.join('.', 'checkpoints', 'dmm_opt.pth'))
         log("done saving model and optimizer checkpoints to disk.")
 
     # loads the model and optimizer states from disk
@@ -337,9 +339,9 @@ def main(args):
         assert exists(args.load_opt) and exists(args.load_model), \
             "--load-model and/or --load-opt misspecified"
         log("loading model from %s..." % args.load_model)
-        dmm.load_state_dict(torch.load(args.load_model))
+        dmm.load_state_dict(torch.load(os.path.join('.', 'checkpoints', 'dmm_model.pth')))
         log("loading optimizer states from %s..." % args.load_opt)
-        adam.load(args.load_opt)
+        adam.load(os.path.join('.', 'checkpoints', 'dmm_opt.pth'))
         log("done loading model and optimizer states.")
 
     # prepare a mini-batch and take a gradient step to minimize -elbo
