@@ -21,7 +21,7 @@ import numpy as np
 import six.moves.cPickle as pickle
 import torch
 import torch.nn as nn
-from tqdm import trange
+from tqdm import tqdm, trange
 
 import polyphonic_data_loader as poly
 import pyro
@@ -360,6 +360,7 @@ def main(args):
         mini_batch_start = (which_mini_batch * args.mini_batch_size)
         mini_batch_end = np.min([(which_mini_batch + 1) * args.mini_batch_size, N_train_data])
         mini_batch_indices = shuffled_indices[mini_batch_start:mini_batch_end]
+
         # grab a fully prepped mini-batch using the helper function in the data loader
         mini_batch, mini_batch_reversed, mini_batch_mask, mini_batch_seq_lengths \
             = poly.get_mini_batch(mini_batch_indices, training_data_sequences,
@@ -392,8 +393,10 @@ def main(args):
     #################
     # TRAINING LOOP #
     #################
-    times = [time.time()]
-    for epoch in range(args.num_epochs):
+    desc = "Epoch %4d | Loss %.4f | CUDA enabled" if args.cuda else "Epoch %4d | Loss %.4f"
+    pbar = trange(args.num_epochs, desc=desc, unit="epoch")
+    # for epoch in range(args.num_epochs):
+    for epoch in pbar:
         # if specified, save model and optimizer states to disk every checkpoint_freq epochs
         if args.checkpoint_freq > 0 and epoch > 0 and epoch % args.checkpoint_freq == 0:
             save_checkpoint()
@@ -409,22 +412,23 @@ def main(args):
             epoch_nll += process_minibatch(epoch, which_mini_batch, shuffled_indices)
 
         # report training diagnostics
-        times.append(time.time())
-        epoch_time = times[-1] - times[-2]
-        log("[training epoch %04d]  %.4f \t\t\t\t(dt = %.3f sec)" %
-            (epoch, epoch_nll / N_train_time_slices, epoch_time))
+        pbar.set_description(desc % (epoch, epoch_nll / N_train_time_slices))
+
+        if np.isnan(epoch_nll):
+            print("Gradient exploded. Exiting program.")
+            quit()
 
         # do evaluation on test and validation data and report results
         if val_test_frequency > 0 and epoch > 0 and epoch % val_test_frequency == 0:
             val_nll, test_nll = do_evaluation()
-            log("[val/test epoch %04d]  %.4f  %.4f" % (epoch, val_nll, test_nll))
+            pbar.write("Epoch %04d | Validation Loss %.4f, Test Loss %.4f" % (epoch, val_nll, test_nll))
 
 
 # parse command-line arguments and execute the main method
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="parse args")
-    parser.add_argument('-n', '--num-epochs', type=int, default=5000)
+    parser.add_argument('-n', '--num-epochs', type=int, default=2500)
     parser.add_argument('-lr', '--learning-rate', type=float, default=0.0003)
     parser.add_argument('-b1', '--beta1', type=float, default=0.96)
     parser.add_argument('-b2', '--beta2', type=float, default=0.999)
@@ -440,8 +444,8 @@ if __name__ == '__main__':
     parser.add_argument('-cf', '--checkpoint-freq', type=int, default=0)
     parser.add_argument('-lopt', '--load-opt', type=str, default='')
     parser.add_argument('-lmod', '--load-model', type=str, default='')
-    parser.add_argument('-sopt', '--save-opt', type=str, default='')
-    parser.add_argument('-smod', '--save-model', type=str, default='')
+    parser.add_argument('-sopt', '--save-opt', type=str, default='checkpoints/dmm_opt.pth')
+    parser.add_argument('-smod', '--save-model', type=str, default='checkpoints/dmm_model.pth')
     parser.add_argument('--cuda', action='store_true')
     parser.add_argument('-l', '--log', type=str, default='dmm.log')
     args = parser.parse_args()
